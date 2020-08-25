@@ -1,0 +1,401 @@
+---
+title: "MATH2349 Semester 2, 2019"
+author: "Sarthak Sirari (S3766477) | Zhuoming Li (S3815870) | Lei Wang (S3412072)"
+subtitle: Assignment 3
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+## Required packages 
+
+Before we begin with our project, we need to import all the necessary libraries in this part.
+
+```{r message=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(forecast)
+library(editrules)
+library(kableExtra)
+```
+
+
+## Executive Summary 
+
+* In this pre-processing, we discussed the relations between environmental and socioeconomic sustainability w.r.t. Human Development Index (HDI) ranking of the 189 countries.
+* We found two datasets and used inner-join operator to merge them together by the common variable "Country" so that a new data frame is created.
+* To be more convenient, we convert the data in "Country" column into factor and all the other columns with values are converted from character to numeric.
+* Then we found that the dataframe is untidy, there exists a duplicated column "HDI.rank.x" same as "HDI.rank.y", only one is needed.
+* Then we create 2 factor variables "Red.List.Index.Category" & "Forest.Cover.Change.Category" defined from existing "Red.List.Index" (from Very Low to Very High) and "Forest.Cover.Change" (to see if the forest cover increased, decreased or stayed the same) variables.
+* Then in the dataframe, we scan all variables and try to find the columns which contain missing values, then we replace the missing values by the calculated mean values in those columns.
+* For some special values, we created new function and apply for the dataframe to find special values (infinity or nan), also apply. Then applied couple of rules over the variables to keep the data in check.
+* Then generate a new function called "outlier" that can be applied to the dataframe for the numeric variables.
+* Also, generate a function called "cap" and apply it for replacing the exist outlier(s) with the nearest neighbours that is non-outlier.
+* After that, plot a histogram based on a numeric column of the dataframe, we now apply Box-Cox transformation with "lamda=auto" so that the transform the skewed data to normal distribution, since the normality assumption is crucial when doing statistical hypothesis test or analysis.
+
+
+## Data 
+
+* The first data set "Environmental sustainability" was downloaded from United Nations Development Programme (UNDP) - Human Development Reports (HDR) under the following URL:- <br> http://hdr.undp.org/en/composite/Dashboard4
+* The data set "Environmental sustainability" contains a total of 12 variables that cover environmental sustainability and environmental threats.
+* The first two are the common variables - HDI Rank and Country Name.
+* The next seven level and change indicators variables on environmental sustainability are energy consumption, carbon dioxide emissions, change in forest area and fresh water withdrawals.
+* The next three environmental threats indicators are mortality rate, which is attributed to household and ambient air pollution and another is attributed to unsafe water, sanitation and hygiene service, and the Red List Index deviced by the International Union for Conservation of Nature and Natural resources which is a measure to aggregate extinction risk across different species.
+* The data is available for 189 countries in total.
+
+* The second data set "Socioeconomic sustainability" was downloaded from United Nations Development Programme (UNDP) - Human Development Reports (HDR) under the following URL:- <br> http://hdr.undp.org/en/composite/Dashboard5
+* The data set "Socioeconomic sustainability" contains a total of 13 variables for the economic and social sustainability.
+* The first two are the common variables - HDI Rank and Country Name.
+* The next six economic sustainability indicators are adjusted net savings, total debt service, gross capital formation, skilled labour force, diversity of exports and expenditure on research and development.
+* The next four social sustainability indicators are the ratio of education and health expenditure to military expenditure, change in overall loss in HDI value due to inequality, and changes in gender and income inequality.
+* The data is available for 189 countries in total.
+
+* First, we set up a working directory to conveniently read the files
+* Read the csv file and store the dataset in "environmental_sustainability" and convert factor to character then view the dataset
+* Read the csv file and store the dataset in "socioeconomic_sustainability" and convert factor to character then view the dataset
+* Use inner join to combine two dataset with a common column, the variable "country" and print out the new dataset (view the table)
+
+```{r}
+# Set the working directory 
+setwd("C:\\Users\\abhis\\OneDrive\\Desktop\\Master of Data Science\\Sem 2\\Data Preprocessing MATH2349\\Assignments\\Assignment 3")
+
+# Check the working directory 
+getwd()
+
+# Read the csv file and store the dataset in "environmental_sustainability" and set stringsAsFactors as FALSE
+environmental_sustainability <- read.csv("Environmental_Sustainability.csv", stringsAsFactors = FALSE)
+
+# Check the data set
+environmental_sustainability
+
+#read the csv file and store the dataset in "socioeconomic_sustainability" and set stringsAsFactors as FALSE
+socioeconomic_sustainability <- read.csv("Socioeconomic_Sustainability.csv", stringsAsFactors = FALSE)
+
+# Check the data set
+socioeconomic_sustainability
+
+# Use inner-join to combine 2 dataset with a common column, the varibale "country"
+environmental_and_socioeconomic_sustainability <- inner_join(environmental_sustainability, socioeconomic_sustainability, by="Country")
+
+# Check the data set
+environmental_and_socioeconomic_sustainability
+```
+
+## Understand 
+
+* Use str() to check structure of the data set to view each column names, values and variable type in the new dataframe after using inner join
+* Convert the data type in column "Country" from character to factor
+* Convert the data type in numeric columns from character to numeric
+* Repeat this procedure for other columns contain numbers, convert them from character to numeric
+* Finally verify whether all the conversion are successful
+
+```{r}
+# Check structure of the data set
+str(environmental_and_socioeconomic_sustainability)
+
+# Covert the character variable to factor variable
+environmental_and_socioeconomic_sustainability$Country <- factor(environmental_and_socioeconomic_sustainability$Country, ordered = FALSE)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Fossil.fuel.energy.consumption <- as.numeric(environmental_and_socioeconomic_sustainability$Fossil.fuel.energy.consumption)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Carbon.dioxide.emissions.KG.per.PPP.GDP <- as.numeric(environmental_and_socioeconomic_sustainability$Carbon.dioxide.emissions.KG.per.PPP.GDP)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Forest.Cover <- as.numeric(environmental_and_socioeconomic_sustainability$Forest.Cover)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change <- as.numeric(environmental_and_socioeconomic_sustainability$Forest.Cover.Change)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Fresh.water.withdrawals <- as.numeric(environmental_and_socioeconomic_sustainability$Fresh.water.withdrawals)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Mortality.Rate.attributed.to.Household.and.ambient.air.pollution <- as.numeric(environmental_and_socioeconomic_sustainability$Mortality.Rate.attributed.to.Household.and.ambient.air.pollution)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services <- as.numeric(environmental_and_socioeconomic_sustainability$Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Adjusted.net.savings <- as.numeric(environmental_and_socioeconomic_sustainability$Adjusted.net.savings)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Total.debt.service <- as.numeric(environmental_and_socioeconomic_sustainability$Total.debt.service)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Gross.capital.formation <- as.numeric(environmental_and_socioeconomic_sustainability$Gross.capital.formation)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Skilled.labour.force <- as.numeric(environmental_and_socioeconomic_sustainability$Skilled.labour.force)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Concentration.index.exports <- as.numeric(environmental_and_socioeconomic_sustainability$Concentration.index.exports)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Research.and.development.expenditure <- as.numeric(environmental_and_socioeconomic_sustainability$Research.and.development.expenditure)
+
+environmental_and_socioeconomic_sustainability$Education.and.health.expenditure.versus.military.expenditure <- as.numeric(environmental_and_socioeconomic_sustainability$Education.and.health.expenditure.versus.military.expenditure)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Ratio.of.education.and.health.expenditure.to.military.expenditure <- as.numeric(environmental_and_socioeconomic_sustainability$Ratio.of.education.and.health.expenditure.to.military.expenditure)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Overall.loss.in.HDI.value.due.to.inequality.Change <- as.numeric(environmental_and_socioeconomic_sustainability$Overall.loss.in.HDI.value.due.to.inequality.Change)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Gender.Inequality.Index.Change <- as.numeric(environmental_and_socioeconomic_sustainability$Gender.Inequality.Index.Change)
+
+# Convert the type from character to numeric
+environmental_and_socioeconomic_sustainability$Income.quintile.ratio.Change <- as.numeric(environmental_and_socioeconomic_sustainability$Income.quintile.ratio.Change)#All above are convert to numeric variable
+
+# Verify all the data type conversion
+str(environmental_and_socioeconomic_sustainability)
+```
+
+
+##	Tidy & Manipulate Data I 
+
+* In this step, we check three interrelated rules which make a dataset tidy (introduced by Hadley Wickham and Grolemund in 2016) over our dataset as following: -
+  * Each variable must have its own column
+  * Each observation must have its own row
+  * Each value must have its own cell
+* When we checked the rules over our dataset, we found that our data is already in tidy form.
+* Since our data set follows all the tidy rules, so there is no need to apply any transformation to make the data tidy.
+* However, we found column "HDI.rank" is reapted twice and stored as "HDI.rank.x" and "HDI.rank.y" in the dataframe, so remove one "HDI.rank.y" and renamed the column "HDI.rank.x" as "HDI.rank"
+* View the updated dataframe
+
+```{r}
+# Remove the "HDI.rank.y" this duplicate column
+environmental_and_socioeconomic_sustainability <- select(environmental_and_socioeconomic_sustainability, -HDI.rank.y)
+
+# Rename the "HDI.rank.x" as "HDI.rank"
+colnames(environmental_and_socioeconomic_sustainability)[colnames(environmental_and_socioeconomic_sustainability)=="HDI.rank.x"] <- "HDI.rank"
+
+# Verify the updated data set
+environmental_and_socioeconomic_sustainability
+```
+
+##	Tidy & Manipulate Data II 
+
+* In this step, we added a new column "Red.List.Index.Category" with categorical variables (very low, low, medium, high very high) to define the index values in column "Red.List.Index"
+* We used ifelse() function to determine the range of index for each level, for example, [0.8,1.0] is "very high" and between [0.5, 0.599] is "low", all other less than 0.5 is "very low"
+* Check the class of the column "Red.List.Index.Category" is character in data frame
+* Rearrange the information in column "Red.List.Index.Category" to follow the order level "Very Low", "Low", "Medium", "High", "Very High" and also convert to factor variables
+* Verify the variables in this column are factors
+* Check and show the levels in order is "Very Low", "Low", "Medium", "High", "Very High"
+
+* Similarly, we added a new column "Forest.Cover.Change.Category" with categorical variables (Incr, Decr, Same) to define the values of change in column "Forest.Cover.Change"
+* Use ifelse() function to determine that if the values of changes are ">0", call "Incr", if the changes are "<0", call "Decr"; otherwise ("=0", No difference), call "Same".
+* Check the class of the column "Forest.Cover.Change.Category" is character in data frame.
+* Convert the character variables in column "Forest.Cover.Change.Category" to factor variables, and we don not need to order them, because no ordered for "increase, decrease, same".
+* Verify the variables in column "Forest.Cover.Change.Category" are factors
+* Check and show the levels as "Decr, Same, Incr"
+* Print and view the updated dataframe
+
+```{r echo = FALSE, results = "axis"}
+Red.List.Index <- c("1.000 - 0.800", "0.799 - 0.700", "0.699 - 0.600", "0.599 - 0.500", "0.499 - 0.400")
+Red.List.Index.Category <- c("Very High", "High", "Medium", "Low", "Very Low")
+kable(data.frame(Red.List.Index, Red.List.Index.Category)) %>% kable_styling()
+```
+
+```{r}
+# Create new variable using mutate() function to have categories for Red List Index
+environmental_and_socioeconomic_sustainability <- mutate(environmental_and_socioeconomic_sustainability, Red.List.Index.Category = ifelse(Red.List.Index<=1.000 & Red.List.Index>=0.800,"Very High", ifelse(Red.List.Index<=0.799 & Red.List.Index>=0.700,"High", ifelse(Red.List.Index<=0.699 & Red.List.Index>=0.600,"Medium", ifelse(Red.List.Index<=0.599 & Red.List.Index>=0.500,"Low","Very Low")))))
+
+# Check the class of the new variable
+environmental_and_socioeconomic_sustainability$Red.List.Index.Category %>% class()
+
+# Convert the variable to ordered factor
+environmental_and_socioeconomic_sustainability$Red.List.Index.Category  <- factor(environmental_and_socioeconomic_sustainability$Red.List.Index.Category , labels=c("Very Low", "Low", "Medium", "High", "Very High"), ordered=TRUE)
+
+# Verify the column in convereted to factor
+environmental_and_socioeconomic_sustainability$Red.List.Index.Category %>% is.factor()
+
+# Show the levels in order, very low - very high
+environmental_and_socioeconomic_sustainability$Red.List.Index.Category %>% levels()
+
+# Create new variable using mutate() function to have categories for Forest Cover Change
+environmental_and_socioeconomic_sustainability <- mutate(environmental_and_socioeconomic_sustainability, Forest.Cover.Change.Category = ifelse(Forest.Cover.Change > 0, "Incr", ifelse(Forest.Cover.Change < 0,"Decr","Same")))
+
+# Check the class of the new variable
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% class()
+
+# Convert the variable to factor
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category  <- factor(environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category , labels=c("Decr", "Same", "Incr"), ordered = FALSE)
+
+# Verify the column in convereted to factor
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% is.factor()
+
+# Show the levels of the column
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% levels()
+
+# Verify the data set
+environmental_and_socioeconomic_sustainability
+
+```
+
+
+##	Scan I 
+
+* In this step, first we check the missing values count in each variable
+* Now we have found all the missing in columns, then from the dataframe,
+  * Use “round” function and “mean(...na.rm=TRUE)” function to calculate the mean(average) of the “weight” exclude all NA(missing value); then round the numbers up to the decimal places in which each column values currently are.
+  * Use “ifelse()” function to make conditions for the “weight” column: if the value is missing, replace the “NA” values by the mean of the “weight”, otherwise keep the original values in “weight” column.
+* For "Forest.Cover.Change.Category" column, since it is dependent on "Forest.Cover.Change", we fill in the values again in the "Forest.Cover.Change.Category" column as per the "Forest.Cover.Change" as we have filled in the missing values in "Forest.Cover.Change" column by repeating the steps performed in the previous task
+
+* Now we created a function isSpecial() to check for special values, i.e. infinite (Inf and -Inf) and NaN.
+* Apply the function to each column to check for special values
+* No specials values were found, so we proceed.
+
+* Then we created two rules as following:-
+  * Check if the HDI rank from 1 to 189, as only 189 countries are available in the data set
+  * Check if the Red List Index value is in between 0 to 1
+* Apply both the rules over the dataset
+
+```{r}
+# Check the missing values in each column
+environmental_and_socioeconomic_sustainability %>% is.na() %>% colSums()
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Fossil.fuel.energy.consumption = ifelse(is.na(Fossil.fuel.energy.consumption), round(mean(Fossil.fuel.energy.consumption, na.rm = TRUE), 1), Fossil.fuel.energy.consumption))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Carbon.dioxide.emissions.KG.per.PPP.GDP = ifelse(is.na(Carbon.dioxide.emissions.KG.per.PPP.GDP), round(mean(Carbon.dioxide.emissions.KG.per.PPP.GDP, na.rm = TRUE), 2), Carbon.dioxide.emissions.KG.per.PPP.GDP))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Forest.Cover = ifelse(is.na(Forest.Cover), round(mean(Forest.Cover, na.rm = TRUE), 1), Forest.Cover))#.....
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Forest.Cover.Change = ifelse(is.na(Forest.Cover.Change), round(mean(Forest.Cover.Change, na.rm = TRUE), 1), Forest.Cover.Change))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Fresh.water.withdrawals = ifelse(is.na(Fresh.water.withdrawals), round(mean(Fresh.water.withdrawals, na.rm = TRUE), 1), Fresh.water.withdrawals))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Mortality.Rate.attributed.to.Household.and.ambient.air.pollution = ifelse(is.na(Mortality.Rate.attributed.to.Household.and.ambient.air.pollution), round(mean(Mortality.Rate.attributed.to.Household.and.ambient.air.pollution, na.rm = TRUE), 1), Mortality.Rate.attributed.to.Household.and.ambient.air.pollution))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services = ifelse(is.na(Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services), round(mean(Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services, na.rm = TRUE), 1), Mortality.rate.attributed.to.Unsafe.water..sanitation.and.hygiene.services))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Adjusted.net.savings = ifelse(is.na(Adjusted.net.savings), round(mean(Adjusted.net.savings, na.rm = TRUE), 1), Adjusted.net.savings))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Total.debt.service = ifelse(is.na(Total.debt.service), round(mean(Total.debt.service, na.rm = TRUE), 1), Total.debt.service))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Gross.capital.formation = ifelse(is.na(Gross.capital.formation), round(mean(Gross.capital.formation, na.rm = TRUE), 1), Gross.capital.formation))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Skilled.labour.force = ifelse(is.na(Skilled.labour.force), round(mean(Skilled.labour.force, na.rm = TRUE), 1), Skilled.labour.force))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Concentration.index.exports = ifelse(is.na(Concentration.index.exports), round(mean(Concentration.index.exports, na.rm = TRUE), 3), Concentration.index.exports))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Research.and.development.expenditure = ifelse(is.na(Research.and.development.expenditure), round(mean(Research.and.development.expenditure, na.rm = TRUE), 1), Research.and.development.expenditure))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Education.and.health.expenditure.versus.military.expenditure = ifelse(is.na(Education.and.health.expenditure.versus.military.expenditure), round(mean(Education.and.health.expenditure.versus.military.expenditure, na.rm = TRUE), 1), Education.and.health.expenditure.versus.military.expenditure))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Ratio.of.education.and.health.expenditure.to.military.expenditure = ifelse(is.na(Ratio.of.education.and.health.expenditure.to.military.expenditure), round(mean(Ratio.of.education.and.health.expenditure.to.military.expenditure, na.rm = TRUE), 1), Ratio.of.education.and.health.expenditure.to.military.expenditure))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Overall.loss.in.HDI.value.due.to.inequality.Change = ifelse(is.na(Overall.loss.in.HDI.value.due.to.inequality.Change), round(mean(Overall.loss.in.HDI.value.due.to.inequality.Change, na.rm = TRUE), 1), Overall.loss.in.HDI.value.due.to.inequality.Change))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Gender.Inequality.Index.Change = ifelse(is.na(Gender.Inequality.Index.Change), round(mean(Gender.Inequality.Index.Change, na.rm = TRUE), 1), Gender.Inequality.Index.Change))
+
+# Fill missing values with the mean value
+environmental_and_socioeconomic_sustainability <- environmental_and_socioeconomic_sustainability %>% mutate(Income.quintile.ratio.Change = ifelse(is.na(Income.quintile.ratio.Change), round(mean(Income.quintile.ratio.Change, na.rm = TRUE), 1), Income.quintile.ratio.Change))
+
+# Fill the values in new values in Forest.Cover.Change.Category column
+environmental_and_socioeconomic_sustainability <- mutate(environmental_and_socioeconomic_sustainability, Forest.Cover.Change.Category = ifelse(Forest.Cover.Change > 0, "Incr", ifelse(Forest.Cover.Change < 0,"Decr","Same")))
+
+# Check the class of Forest.Cover.Change.Category variable
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% class()
+
+# Convert the variable to factor
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category  <- factor(environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category , labels=c("Decr", "Same", "Incr"), ordered = FALSE)
+
+# Verify the Forest.Cover.Change.Category column in convereted to factor
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% is.factor()
+
+# Verify the levels of the column
+environmental_and_socioeconomic_sustainability$Forest.Cover.Change.Category %>% levels()
+
+# Verify the missing values is removed
+environmental_and_socioeconomic_sustainability %>% is.na() %>% colSums()
+
+# Function made to check for special values, i.e. infinite (Inf and -Inf) and NaN
+is.special <- function(x){
+  if (is.numeric(x)) (is.infinite(x) | is.nan(x))
+}
+
+# Apply the function on each varible
+sapply(environmental_and_socioeconomic_sustainability, function(x) sum(is.special(x)))
+
+# Make a new rule Rule1 that HDI Rank is between 1 to 189, as total of 189 countries are present in the data sets
+(Rule1 <- editset(c("HDI.rank > 0", "HDI.rank < 190")))
+
+# Make a new rule Rule2 to check the Red List Index is 0 to 1
+(Rule2 <- editset(c("Red.List.Index > 0", "Red.List.Index < 1")))
+
+# Check the Rule1 on the data set
+sum(violatedEdits(Rule1, environmental_and_socioeconomic_sustainability))
+
+# Check the Rule2 on the data set
+sum(violatedEdits(Rule2, environmental_and_socioeconomic_sustainability))
+```
+
+
+##	Scan II
+
+* In this step, we created a function called "outliers()" to seek the outliers in each variable of the data set
+* Apply this function by sapply() function to call outliers() function over the dataframe on only column 1 and columns 3 to 23, since those are numeric
+* Create a function called "cap()" which define as "replace the outliers with its nearest neighbour which is not an outlier"
+* Apply cap() function by using sapply() function to the dataframe which only column 1 and columns 3 to 23, since those are numeric
+
+```{r}
+# Function to check the outliers in each variable of the data set
+outliers <- function(x) {
+  boxplot(x, plot= FALSE)$out
+}
+
+# Apply the function outlier() on each numeric column
+sapply(environmental_and_socioeconomic_sustainability[,c(1, 3:23)], FUN = outliers)
+
+# Function to replace the outliers with its nearest neighbour which is not an outlier
+cap <- function(x){
+  quantiles <- quantile( x, c(.05, 0.25, 0.75, .95 ) )
+  x[ x < quantiles[2] - 1.5*IQR(x) ] <- quantiles[1]
+  x[ x > quantiles[3] + 1.5*IQR(x) ] <- quantiles[4]
+  x
+}
+
+# Apply the function outlier() on each numeric column
+environmental_and_socioeconomic_sustainability[,c(1, 3:23)] <- sapply(environmental_and_socioeconomic_sustainability[,c(1, 3:23)], FUN = cap)
+```
+
+
+##	Transform 
+
+* In this step, we applied data transformation on the column "Mortality.Rate.attributed.to.Household.and.ambient.air.pollution"
+* We checked the histogram of the column "Mortality.Rate.attributed.to.Household.and.ambient.air.pollution" and found that it is "Skewed to the Right"
+* To make the data normalised, we applied Box-Cox transformation with "lamda='auto'"
+* This function can easily transform the skewed data to normal distribution, since normal distribution is important for statistical hypothesis testing
+* We the plot the histogram of the transformed data to verify that the data is transformed to a normal distribution
+
+```{r}
+# Plot the histogram for the column "Mortality.Rate.attributed.to.Household.and.ambient.air.pollution"
+hist(environmental_and_socioeconomic_sustainability$Mortality.Rate.attributed.to.Household.and.ambient.air.pollution, main="Historgram of Mortality Rate", xlab="Mortality Rate")
+
+# Apply Box-Cox transformation on the column and plot its histogram
+hist(BoxCox(environmental_and_socioeconomic_sustainability$Mortality.Rate.attributed.to.Household.and.ambient.air.pollution, lambda = "auto"), main="Normalised historgram of Mortality Rate", xlab="Mortality Rate")
+```
+<br>
+<br>

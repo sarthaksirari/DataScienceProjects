@@ -1,0 +1,564 @@
+---
+title: "Analysis of Egg Depositions of Age-3 Lake Huron Bloaters (Coregonus Hoyi)"
+subtitle: "MATH1318 Time Series Analysis - Assignment 2"
+author: "Sarthak Sirari (S3766477)"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+# Introduction
+
+Coregonus Hoyi (a.k.a. Bloater) is a kind of freshwater whitefish, belonging to the family Salmonidae. It could be found in Great Lakes of North America, near the depths of 30 to 198 metres. Its average length is 10 inches, but it could be as big as 14.6 inches and comfortable in the temperatures between 1.5 to 11.4 Celsius.
+
+The population of Coregonus Hoyi is under decline and IUCN Red List has listed it as Vulnerable to global extinction. Its decline is due to predation by the species alewife and sea lamprey, and due to water pollution as well.
+
+However, efforts by the activists to re-introduce Coregonus Hoyi in the Lake Ontario was a success and since then its numbers have increased. The plan is to increase its total population to 500,000 in Lake Ontario.
+
+We will be observing the data of egg depositions of Age-3 Lake Huron Bloaters, performing several fitting operations, running some diagnostics to find the best fit model for the data.
+
+Further, we will be predicting the values future values of egg depositions.
+
+
+# Problem Statement
+
+The purpose of this assignment is to determine the best fit model among the available deterministic trend models (such as linear and quadratic) and the stochastic trends (like ARIMA model). Also, we have to provide the predictions of egg depositions for the next 5 years.
+
+
+# Data
+
+Our data set is available in BloaterLH dataset of FSAdata package and also provided by our course coordinator and contains a total of 16 observations.
+
+The dataset provided in BloaterLH dataset of FSAdata package consists of 3 columns namely year, eggs and age3, whereas the data provided by our course coordinator contains 2 columns, i.e. year and eggs. However, we need to use just the data of eggs column for analysis. The unit of the eggs column is millions.
+
+
+# Load Libraries
+
+Load all the necssary libraries
+
+```{r setup, warning=FALSE, message=FALSE}
+# Load all necessary libraries
+library(TSA)
+library(tseries)
+library(FSAdata)
+library(lmtest)
+library(forecast)
+```
+
+
+# Load Data Set
+
+```{r}
+# Load the provided data set
+data(BloaterLH)
+
+# Check the data
+head(BloaterLH)
+
+# Check the type of the egg depositions data
+class(BloaterLH$eggs)
+```
+
+# Convert Egg Depositions Data to Time Series
+
+Now, we convert the converted egg depositions data to a time series.
+
+```{r}
+# Convert the converted egg depositions data to time series data
+eggs <- ts(BloaterLH$eggs, start=1981, end=1996, frequency=1)
+
+# Check the type of the converted egg depositions data
+class(eggs)
+```
+
+# Data Analysis
+
+## Time Series Plot
+
+From the plot in Figure 1, following can be figured out: -
+<br>* Trend: There is an upward trend that can be clearly seen, with some with some change in trend around the year 1990.
+<br>* Seasonality: There no evidence of seasonality.
+<br>* Intervention: No significant intervention points can be noticed. However, there are some points around the years 1985 and 1990, where we can observe a sudden spike, but it is not apparent that these are the intervention points.
+<br>* Variance Change: With the two peaks around the years 1985 and 1990, the data seems to have minor change in variance.
+
+```{r}
+# Plot the time series plot
+plot(eggs, ylab='Egg Depositions (in millions)', xlab='Years', type='o', main = 'Figure 1. Egg depositions of Age3 Lake Huron Bloaters (1981 and 1996)')
+```
+
+## ACF and PACF plot
+
+In the ACF plot in Figure 2 and PACF plot in Figure 3 of our time series data, we can see slowly decaying pattern in ACF and very high first correlation in PACF implies the existence of trend and non-stationarity.
+
+```{r}
+# Plot the ACF and PACF plots of time series data
+par(mfrow=c(1,2))
+acf(eggs, main='Figure 2. ACF vs Lag')
+pacf(eggs, main='Figure 3. PACF vs Lag')
+```
+
+## Histogram
+
+The histogram shown in Figure 4 is skewed to the right, which means our time series data is not normally distributed.
+
+```{r}
+# Plot the histogram of time series data
+hist(eggs,xlab='Egg Depositions (in millions)', main = 'Figure 4. Histogram of the standardized residuals')
+```
+
+## Scatter Plot
+
+In the plot in Figure 5, a slight upward trend between Egg Depositions of consecutive years can be seen.
+
+```{r}
+# Plot the scatter plot
+plot(y=eggs,x=zlag(eggs),ylab='Egg Depositions (in millions)', xlab='Previous Year Egg Depositions (in millions)' , main = 'Figure 5. Scatter plot of Egg Depositions change in Consecutive years')
+```
+
+## Correlation
+
+A high correlation factor between Egg Depositions of consecutive years of 0.74 can be observed, which supports our observation from PACF plot in Figure 3.
+
+```{r}
+# Calculate correlation between the egg deposition change in the consecutive years
+y = eggs
+x = zlag(eggs)
+index = 2:length(x)
+cor(y[index],x[index]) # strong correlation 0.87
+```
+
+## Q-Q plot
+
+In the Q-Q plot in Figure 6, we can observe that the tails of distribution is far from the normality and our time series data does not seems to be white noise.
+
+```{r}
+# Plot the Q-Q plot of the standardized residuals of the Egg depositions
+qqnorm(eggs, main = 'Figure 6. Normal Q-Q plot of Egg Depositions')
+qqline(eggs, col = 2, lwd = 1, lty = 2)
+```
+
+## Shapiro-Wilk test
+
+From the summary of Shapiro-Wilk normality test shown below, the p-value turn out to be 0.3744, which is greater than 0.05. So we fail to reject the null hypothesis of normal distribution.
+
+```{r}
+# Apply the Shapiro-Wilk test of the Egg Depositions
+shapiro.test(eggs)
+```
+
+## Data Analysis Result
+
+From the analysis of data performed above, we can observe that the data is non-stationary and does not following normal distribution. Also, the data shows Autoregressive as well as Moving Average behaviour (ARIMA Model). However, we will still try to fit a Linear and Quadratic model, just to be sure about it.
+
+
+# Data Modelling
+
+In this part, we will attempt to find the best fit model for our time series data. Even though the data shows clear signs of being an ARIMA Model, we will still try to fit the Linear and Quadratic Models.
+
+## Linear Model
+
+From the summary of the fitted Linear Model below, following can be observed: -
+<br>* The p-value of 0.004642 is less than the significance level of 0.05, hence we can reject the null hypothesis that the model fits our time series data.
+<br>* The R^2 value is 0.4074 (i.e. only 40.74% of variance can be explained by the model), which is less than the ideal 0.8, hence the Linear Model is not the best fit model for our data.
+<br>Therefore, we move forward to check the Quadratic Model.
+
+```{r}
+# Fit Linear Trends Model
+model.eggs.ln = lm(eggs~time(eggs))
+summary(model.eggs.ln)
+```
+
+## Quadratic Model
+
+From the summary of the fitted Quadratic Model below, following can be observed: -
+<br>* The p-value of 0.00289 is less than the significance level of 0.05, hence we can reject the null hypothesis that the model fits our time series data.
+<br>* The R^2 value is 0.5306 (i.e. only 53.06% of variance can be explained by the model), which is less than the ideal 0.8, hence the Quadratic Model is not the best fit model for our data.
+<br>Therefore, we move forward to check the ARIMA Model.
+
+```{r}
+# Fit Quadratic Trends Model
+t = time(eggs)
+t2 = t^2
+model.eggs.qa = lm(eggs ~ t + t2)
+summary(model.eggs.qa)
+```
+
+## ARIMA Model
+
+After fitting our time series data in Linear and Quadratic models, we can conclude that the egg depositions data does not show Deterministic trend. Hence, we can conclude that this is a Stochastic trend.
+
+### Dickey-Fuller Unit-Root Test (ADF)
+
+We perform this ADF test just be sure about the non-stationarity of our time series data.
+
+From the test, we can see the p-value turn out to be 0.5469, which is greater than 0.05. So we have to we conclude that our time series data is non-stationary.
+
+Hence, we move forward to apply Box-Cox transformation to our data.
+
+```{r}
+# Perform Dickey-Fuller Unit-Root Test (ADF) Test on time series data
+adf.test(eggs)
+```
+
+### Box-Cox transformation (Default)
+
+We perform the Box-Cox Transformation (shown in Figure 7) on our time series data using the Default method, but since it is a short series, this method may not agree on lambda.
+Hence, we try the Yule Walker method for determining the value of lambda.
+
+```{r warning=FALSE}
+# Perform Box-Cox transformation using Default method
+eggs.bc.transform = BoxCox.ar(eggs)
+title(main = 'Figure 7. Log likelihood vs the values of lambda (Default)')
+```
+
+### Box-Cox transformation (Yule Walker)
+
+We perform the Box-Cox Transformation (shown in Figure 8) on our time series data using the Yule Walker method and check the confidence interval.
+
+```{r warning=FALSE}
+# Perform Box-Cox transformation using Yule Walker method
+eggs.bc.transform = BoxCox.ar(eggs, method = "yule-walker")
+title(main = 'Figure 8. Log likelihood vs the values of lambda (Yule Walker)')
+
+# Check confidence interval
+eggs.bc.transform$ci
+```
+
+### Box-Cox transformation of Data
+
+To create the Box-Cox transformed data, we used the mid-point of the confidence interval as lambda value
+
+```{r}
+# Set lambda value to the mid-point of the confidence interval
+lambda = 0.45
+
+# Create Box-Cox transformed data
+eggs.bc = (eggs^lambda-1)/lambda
+```
+
+### Q-Q plot
+
+In the Q-Q plot in Figure 9, we can observe that the tails of distribution are now nearer to the normal distribution line, hence, increasing the normality.
+
+```{r}
+# Plot the Q-Q plot of the standardized residuals of the Box-Cox transformed data
+qqnorm(eggs.bc, main = 'Figure 9. Normal Q-Q plot of Box-Cox transformed data')
+qqline(eggs.bc, col = 2, lwd = 1, lty = 2)
+```
+
+### Shapiro-Wilk test
+
+From the summary of Shapiro-Wilk normality test shown below, the p-value has improved from 0.3744 to 0.7107, which is greater than 0.05. So we fail to reject the null hypothesis of normal distribution.
+
+```{r}
+# Apply the Shapiro-Wilk test of the Box-Cox transformed data
+shapiro.test(eggs.bc)
+```
+
+### Dickey-Fuller Unit-Root Test (ADF)
+
+From the test, we can see the p-value turn out to be 0.6955, which is greater than 0.05. So we have to we conclude that our time series data is non-stationary.
+
+Hence, we move forward to apply differencing of Box-Cox transformed data.
+
+```{r}
+# Perform Dickey-Fuller Unit-Root Test (ADF) Test on time series data
+adf.test(eggs.bc)
+```
+
+### First differencing of Box-Cox transformed data
+
+We perform the first differencing below to Box-Cox transformed data
+
+```{r}
+# Perform first differencing of Time Series data
+eggs.bc.diff = diff(eggs.bc)
+```
+
+### Plot the first differencing of Box-Cox transformed data
+
+In the time series plot in Figure 10, we can see that the after applying first differencing to Box-Cox transformed data, the trend can still be seen.
+
+```{r}
+# Plot the first differencing of Time Series data
+plot(eggs.bc.diff, type='o', ylab='First differencing of Box-Cox transformed data', xlab='Years', main='Figure 10. Time Series of first differencing of Box-Cox transformed data')
+```
+
+### Q-Q plot
+
+In the Q-Q plot in Figure 11, we can observe that the tails of distribution are a bit away from the normal distribution line around tails.
+
+```{r}
+# Plot the Q-Q plot of the standardized residuals of the Box-Cox transformed data
+qqnorm(eggs.bc.diff, main = 'Figure 11. Normal Q-Q plot of Box-Cox transformed data')
+qqline(eggs.bc.diff, col = 2, lwd = 1, lty = 2)
+```
+
+### Shapiro-Wilk test
+
+From the summary of Shapiro-Wilk normality test shown below, the p-value has decreased from 0.7107 to 0.4086, but still it is greater than 0.05. So we fail to reject the null hypothesis of normal distribution.
+
+```{r}
+# Apply the Shapiro-Wilk test of the Box-Cox transformed data
+shapiro.test(eggs.bc.diff)
+```
+
+### Dickey-Fuller Unit-Root Test (ADF)
+
+From the test, we can see the p-value turn out to be 0.0443, which is less than 0.05, rejecting the null hypothesis of non-stationarity. So we have to we conclude that our time series data after first differencing of Box-Cox transformed data is stationary.
+
+Therefore, we can move forward to determine the order of the best fit ARIMA model.
+
+```{r}
+# Perform Dickey-Fuller Unit-Root Test (ADF) Test on time series data
+adf.test(eggs.bc.diff)
+```
+
+## Data Modelling Result
+
+After performing the data modelling, we conclude that our data gives best results for model fitting, when we do the first differencing of the Box-Cox transformed data.
+
+
+# Determine Best Fit ARIMA Model
+
+## ADF and PADF plot
+
+In the ACF plot in Figure 12 and PACF plot in Figure 13 of our first differencing of Box-Cox transformed data, we can observe that both turn out to be white noise as there are no significant lags in both the plots. So we could not find any values of p and q.
+
+Hence, we move forward to create EACF table.
+
+```{r}
+# Plot the ADF and PADF plots for first differencing of Box-Cox transformed data
+par(mfrow=c(1,2))
+acf(eggs.bc.diff, ci.type = 'ma', main='Figure 12. ACF vs Lag')
+pacf(eggs.bc.diff, main='Figure 13. ACF vs Lag')
+```
+
+## Extended Autocorrelation Function (EACF)
+
+In the EACF Table below, we can take p = 0 and q = 0 as our chosen vertex and include ARIMA(0,1,1), ARIMA(1,1,0) and ARIMA(1,1,1) models into the set of possible AIRMA models.
+
+Now we moved forward to create Bayesian Information Criterion
+
+```{r}
+# Create the Extended Autocorrelation Function (EACF) table
+eacf(eggs.bc.diff, ar.max = 3, ma.max = 3)
+```
+
+
+## Bayesian Information Criterion (BIC)
+
+In the BIC table in Figure 14, we check the shaded columns and conclude that we can include ARIMA(1,1,0), ARIMA(2,1,0) and ARIMA(3,1,0) models in the set of our candidate models.
+
+```{r, warning=FALSE}
+# Plot the Bayesian Information Criterion table
+bic = armasubsets(y = eggs.bc.diff, nar = 3, nma = 3, y.name = 'test', ar.method = 'ols')
+plot(bic)
+title(main = 'Figure 14. Bayesian Information Criterion table', line = 6)
+```
+
+## Best Fit ARIMA Model Result
+
+So to conclude we have the final set of candidate models as ARIMA(0,1,1), ARIMA(1,1,0), ARIMA(1,1,1), ARIMA(2,1,0) and ARIMA(3,1,0).
+
+
+# Parameter Estimation
+
+Here we will perform the Parameter Estimation for each of the final selected ARIMA models.
+
+## ARIMA(0,1,1)
+
+The p-value of MA(1) component is less than 0.05 in CSS method, which means it is highly significant, whereas, the p-value of MA(1) component is greater than 0.05 in ML method, which means it is not significant.
+
+```{r}
+# Perform significance test using conditional sum of squares method
+model_011_css = arima(eggs.bc.diff,order=c(0,1,1),method='CSS')
+coeftest(model_011_css)
+```
+
+```{r}
+# Perform significance test using maximum likelihood estimation method
+model_011_ml = arima(eggs.bc.diff,order=c(0,1,1),method='ML')
+coeftest(model_011_ml)
+```
+
+## ARIMA(1,1,0)
+
+The p-value of AR(1) component is greater than 0.05 in CSS method, which means it is not significant, and the p-value of AR(1) component is greater than 0.05 in ML method, which means it is also not significant.
+
+```{r}
+# Perform significance test using conditional sum of squares method
+model_110_css = arima(eggs.bc.diff,order=c(1,1,0),method='CSS')
+coeftest(model_110_css)
+```
+
+```{r}
+# Perform significance test using maximum likelihood estimation method
+model_110_ml = arima(eggs.bc.diff,order=c(1,1,0),method='ML')
+coeftest(model_110_ml)
+```
+
+## ARIMA(1,1,1)
+
+The p-value of AR(1) component is greater than 0.05 in CSS method, which means it is not significant, and the p-value of AR(1) component is greater than 0.05 in ML method, which means it is also not significant.
+
+The p-value of MA(1) component is less than 0.05 in CSS method, which means it is highly significant, and the p-value of MA(1) component is also less than 0.05 in ML method, which means it is highly significant.
+
+```{r}
+# Perform significance test using conditional sum of squares method
+model_111_css = arima(eggs.bc.diff,order=c(1,1,1),method='CSS')
+coeftest(model_111_css)
+```
+
+```{r}
+# Perform significance test using maximum likelihood estimation method
+model_111_ml = arima(eggs.bc.diff,order=c(1,1,1),method='ML')
+coeftest(model_111_ml)
+```
+
+## ARIMA(2,1,0)
+
+The p-value of AR(1) component is greater than 0.05 in CSS method, which means it is not significant, and the p-value of AR(1) component is greater than 0.05 in ML method, which means it is also not significant.
+
+The p-value of AR(2) component is greater than 0.05 in CSS method, which means it is not significant, and the p-value of AR(2) component is greater than 0.05 in ML method, which means it is also not significant.
+
+```{r}
+# Perform significance test using conditional sum of squares method
+model_210_css = arima(eggs.bc.diff,order=c(2,1,0),method='CSS')
+coeftest(model_210_css)
+```
+
+```{r}
+# Perform significance test using maximum likelihood estimation method
+model_210_ml = arima(eggs.bc.diff,order=c(2,1,0),method='ML')
+coeftest(model_210_ml)
+```
+
+## ARIMA(3,1,0)
+
+The p-value of AR(1) component is less than 0.05 in CSS method, which means it is significant, and the p-value of AR(1) component is also less than 0.05 in ML method, which means it is also significant.
+
+The p-value of AR(2) component is greater than 0.05 in CSS method, which means it is not significant, and the p-value of AR(2) component is greater than 0.05 in ML method, which means it is also not significant.
+
+The p-value of AR(3) component is less than 0.05 in CSS method, which means it is significant, and the p-value of AR(3) component is also less than 0.05 in ML method, which means it is also significant.
+
+```{r}
+# Perform significance test using conditional sum of squares method
+model_310_css = arima(eggs.bc.diff,order=c(3,1,0),method='CSS')
+coeftest(model_310_css)
+```
+
+```{r}
+# Perform significance test using maximum likelihood estimation method
+model_310_ml = arima(eggs.bc.diff,order=c(3,1,0),method='ML')
+coeftest(model_310_ml)
+```
+
+
+## Sort Score w.r.t. AIC and BIC values
+
+Here we sort the AIC and BIC scores of the chosen ARIMA models using maximum likelihood estimation method.
+
+As per the AIC and BIC tables shown below, we can observe that ARIMA(0,1,1) has smallest AIC and BIC values both.
+
+```{r warning=FALSE, message=FALSE}
+sort.score <- function(x, score = c("bic", "aic")){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  } else if (score == "bic") {
+    x[with(x, order(BIC)),]
+  } else {
+    warning('score = "x" only accepts valid arguments ("aic","bic")')
+  }
+}
+
+sort.score(AIC(model_011_ml,model_110_ml,model_111_ml,model_210_ml,model_310_ml), score = "aic")
+sort.score(BIC(model_011_ml,model_110_ml,model_111_ml,model_210_ml,model_310_ml), score = "bic" )
+```
+
+## Parameter Estimation Result
+
+From the tables, we conclude that ARIMA(0,1,1) is the best fit model.
+
+
+# Residual Analysis
+
+Now we perform the Residual Analysis of our best fit ARIMA(0,1,1) model and following are the observations from the same: -
+<br>* Time Series Plot in Figure 14 shows no trends and also there is no variance that can be observed, which mean our chosen model could be the best fit.
+<br>* Histogram in Figure 15 appears to be normally distributed, which means our chosen model could fit the normal distribution, shows little to no skewness.
+<br>* The ACF of standardised residuals in Figure 16 appears to be white noise, which means our chosen model fits the data.
+<br>* The PACF of standardised residuals in Figure 17 also appears to be white noise, which means our chosen model fits the data.
+<br>* The Q-Q Plot shown in Figure 18 depicts that most of the points are near to the normal distribution line, which means our chosen model could fit the normal distribution.
+<br>* The Ljung-Box Test in Figure 19 shows all the points at each lag are above the 5% dashed line, this means we fail to reject the null hypothesis that the error terms are uncorrelated.
+<br>* From the summary of Shapiro-Wilk normality test, the p-value turn out to be 0.653, which is greater than 0.05. So we fail to reject the null hypothesis of normal distribution.
+
+```{r warning=FALSE, message=FALSE}
+residual.analysis <- function(model, std = TRUE,start = 2, class = c("ARIMA","GARCH","ARMA-GARCH")[1]){
+  # If you have an output from arima() function use class = "ARIMA"
+  # If you have an output from garch() function use class = "GARCH". 
+  # Please note that you should use tseries package to be able to run this function for GARCH models.
+  # If you have an output from ugarchfit() function use class = "ARMA-GARCH"
+  library(TSA)
+  library(FitAR)
+  if (class == "ARIMA"){
+    if (std == TRUE){
+      res.model = rstandard(model)
+    }else{
+      res.model = residuals(model)
+    }
+  }else if (class == "GARCH"){
+    res.model = model$residuals[start:model$n.used]
+  }else if (class == "ARMA-GARCH"){
+      res.model = model@fit$residuals
+  }else {
+    stop("The argument 'class' must be either 'ARIMA' or 'GARCH' ")
+  }
+  par(mfrow=c(3,2))
+  plot(res.model,type='o',ylab='Standardised residuals', main="Figure 14. Time series plot of standardised residuals")
+  abline(h=0)
+  hist(res.model,main="Figure 15. Histogram of standardised residuals")
+  acf(res.model,main="Figure 16. ACF of standardised residuals")
+  pacf(res.model,main="Figure 17. PACF of standardised residuals")
+  qqnorm(res.model,main="Figure 18. QQ plot of standardised residuals")
+  qqline(res.model, col = 2)
+  print(shapiro.test(res.model))
+  k=0
+  LBQPlot(res.model, lag.max = length(model$residuals) - 1, StartLag = k + 1, k = 0, SquaredQ = FALSE)
+  title("Figure 19.                                          .")
+}
+
+# Call the function residual.analysis()
+residual.analysis(model = model_011_ml)
+```
+
+## Residual Analysis Result
+
+To conclude all the observations from the Residual Analysis performed above, we can confidently say that our chosen model ARIMA(0,1,1) is the best fit model for the data of egg depositions of age-3 Lake Huron Bloaters (1981 and 1996).
+
+
+# Forecasting
+
+Now, finally we perform predicting of the egg depositions (in millions) of age-3 Lake Huron Bloaters for the next 5 year, which can be seen in Figure 20.
+
+```{r}
+# Plot the time series plot of the egg deposition with the forecast for next 5 years
+fitted_model = Arima(eggs, lambda = 0.45, c(0,1,1)) 
+plot(forecast(fitted_model, h = 5), xlab = 'Year', ylab = 'Egg Depositions (in millions)', main = 'Figure 20. Egg depositions of Age3 Lake Huron Bloaters with Forecast')
+```
+
+
+# Conclusion
+
+* We analysed the data egg depositions of Lake Huron Bloaters between the years 1981 and 1996 and found the data to exhibit Autoregressive as well as Moving Average behaviour (ARIMA Model), yet we try to fit a Linear and Quadratic models, just to be sure.
+* We performed the data modelling and concluded that our data gives best results for model fitting, when we do the first differencing of the Box-Cox transformed data.
+* Further, we have proposed a set of possible ARIMA models, using each and every model specification tool such as ACF, PACF, EACF, BIC table and other tests as <b>ARIMA(0,1,1), ARIMA(1,1,0), ARIMA(1,1,1), ARIMA(2,1,0) and ARIMA(3,1,0)</b>.
+* Then we performed Parameter Estimation test, which conclude that <b>ARIMA(0,1,1)</b> is the best fit model.
+* Going forward, we performed Residual Analysis and conclude that our chosen model <b>ARIMA(0,1,1)</b> is the best fit model.
+* Finally, we performed the prediction the egg depositions (in millions) of age-3 Lake Huron Bloaters for the next 5 year, by using the best fit <b>ARIMA(0,1,1)</b> model.
+
+
+# References
+
+* MATH1318 Time Series Analysis notes prepared by Dr. Haydar Demirhan.
+* Time Series Analysis with application in R by Cryer and Chan.

@@ -1,0 +1,543 @@
+---
+title: "Primary productivity in Chatham Rise (New Zealand)"
+author:
+- Group Dream
+- Zhuoming Li(s3815870)
+- Sarthak Sirari(s3766477)
+- Lei Wang(s3412072)
+- Mingyi Tang(s3414342)
+date: "03 June 2020"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+# Table of Content
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE,message=FALSE)
+```
+
+```{r}
+library(TSA)
+library(fUnitRoots)
+library(lmtest)
+library(s20x)
+library(FitAR)
+library(forecast)
+sort.score <- function(x, score = c("bic", "aic")){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  } else if (score == "bic") {
+    x[with(x, order(BIC)),]
+  } else {
+    warning('score = "x" only accepts valid arguments ("aic","bic")')
+  }
+}
+########
+residual.analysis <- function(model, std = TRUE){
+  library(TSA)
+  library(FitAR)
+  if (std == TRUE){
+    res.model = rstandard(model)
+  }else{
+    res.model = residuals(model)
+  }
+  par(mfrow=c(3,2))
+  plot(res.model,type='o',ylab='Standardised residuals', main="Time series plot of standardised residuals")
+  abline(h=0)
+  hist(res.model,main="Histogram of standardised residuals")
+  qqnorm(res.model,main="QQ plot of standardised residuals")
+  qqline(res.model, col = 2)
+  acf(res.model,main="ACF of standardised residuals")
+  print(shapiro.test(res.model))
+  k=0
+  LBQPlot(res.model, lag.max = length(model$residuals)-1 , StartLag = k + 1, k = 0, SquaredQ = FALSE)
+}
+```
+
+
+# Introduction
+
+The most primary productivity growth in New Zealand's marine environment is phytoplankton. The growth of phytoplankton is affected by the nutrients and sunlight. It is important to study phytoplankton growth because it supports the marine organisms, such as fish, mammals, and seabirds. It will help find the changing of ecosystems so that the economic, cultural and recreational purposes for the marine services will be affected. For example, fisheries.
+
+The phytoplankton growth is measured by the concentration of a pigment Chlorophyll-a in milligram/cubic. This data contains records for the phytoplankton growth in oceanic regions between 1998 and 2017, also records for that in coastal areas between 2003 and 2017. We observe that the increasing speed of phytoplankton in oceanic regions is faster than in coastal areas. Thus, we plan to subgroup the dataset to only research in oceanic water areas. Moreover, the Chatham Rise region in this area keeps the highest offshore amounts of phytoplankton in New Zealand.
+
+Overall, we are interested in the change of phytoplankton growth in the Chatham Rise region. Our aim is to forecast the phytoplankton growth in the next 10 years.
+
+
+# Data
+
+Our data set is made available by Statistics New Zealand and collected by National Institute of Water and Atmospheric Research (NIWA), National Oceanic and Atmospheric Administration (NOAA) and National Aeronautics and Space Administration (NASA). It contains a total of 9 columns and 10680 observations.
+
+
+# Data Analysis
+
+* Since we are only interested with the phytoplankton growth in the Chatham Rise region in oceanic water,we subdivide the data and focus on the first 240 rows which records the concentration from Jan1998 to Dec2017 in Chatham Rise. However, we observe some missing values for concentrations in some years, thus we replaced the missing values by the calculated average amount to minimise the bias.   
+* We create a monthly time-series data and visualise the plot(Fig 1). It shows a clear repeated pattern through 1998 to 2017. The trend between 2010 and 2015 is slightly moving down which might indicate the phytoplankton starts decreasing.    
+* Next, we check the ACF AND PACF for the original time-series (Fig 2 and Fig 3) and we can see the curve pattern in the ACF plot. Thus, the seasonality and existence of trend should be reasonably considered in this time-series data.   
+* To remove the seasonal trend effect, we fit a plain model with the first seasonal difference (D=1) and check the residuals(Fig 4) and autocorrelations, we found that the trend is removed, but in the plot "ACF of residuals"(Figure.1 Sample ACF), it shows significant autocorrelation at lag 12 and weak autocorrelation at lag 24; in the PACF of residuals(Fig 6 and Fig 6), both lag12&24 are significantly outstanding.   
+* Therefore, the next step is fitting SAR(2),SMA(2) with the first seasonal difference(D=1) on the plain model.
+
+```{r}
+#setwd("C://Users//Victor//Desktop//RMIT//2020 Sem1//Time sereis//Project")
+pri=read.csv("primary_productivity_clean.csv")
+pri=pri[seq(1:240),]#Take the first 240, which Jan1998-Dec2017,in Chatham Ocean
+cal_mean=mean(pri$data_value,na.rm=T)
+pri[is.na(pri)]<-cal_mean#Convert the missing value to the mean of data_value
+pri_ts=ts(pri$data_value,start = c(1998,1),end=c(2017,12),frequency = 12)
+plot(pri_ts,main="Fig 1. TS plot of monthly primary-productivity")
+par(mfrow=c(1,2))
+acf(pri_ts, lag.max = 36, main="Fig 2. ACF of growth")
+pacf(pri_ts, lag.max = 36, main="Fig 3. PACF of growth")
+p1.product = arima(pri_ts,order=c(0,0,0),seasonal=list(order=c(0,1,0), period=12))
+res.p1 = residuals(p1.product)
+par(mfrow=c(1,1))
+plot(res.p1,xlab='Time',ylab='Residuals',main="Fig 4. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.p1, lag.max = 36, main = "Fig 5. ACF of residuals")
+pacf(res.p1, lag.max = 36, main = "Fig 6. PACF of residuals")
+# TS plot: we can conclude that we got rid of the trend. 
+# Look at ACF and PACF plots over the lags corresponding to the periods namely 12, 24, 36, etc.
+# (Intermediate lags are used to determine p and q of the ordinary trend)
+# We have 2 significant correlation at the first and second seasonal lag in both ACF and PACF. 
+# This indicates P=2, Q=2.
+```
+
+
+# Model Specification
+
+* In this step, we find all the possible SARIMA models that could fit our data.
+* First, we started with plotting the time series for the residuals of the SARMA(2,2) model on our data set.
+* In the time series plot (in Fig 7), the trend can still be seen.
+* Then we plotted the ACF and PACF plot to check if the seasonality is still present.
+* From the ACF (in Fig 8) and PACF (in Fig 9), we can see no significant lags at the first seasonal lags in either ACF and PACF, therefore, we conclude that the seasonality is filtered out.
+* The significant correlation in PACF is probably due to the change point in the series.
+* Then we move ahead with applying the logarithmic transformation on our data.
+* In the time series plot (in Fig 10), variance seems to be stabilized.
+* Now, we plot the time series for the residuals of SARMA(2, 2) model on our log transformed data set.
+* In the time series plot (in Fig 11), the trend can still be seen.
+* Then we plotted the ACF and PACF plot to check if the seasonality is still present.
+* From the ACF (in Fig 12) and PACF (in Fig 13), we found no clear outstanding significant lags at lag 1 in ACF and PACF.
+* This indicates non-stationary, hence we move ahead to apply first differencing and plot the time series for the residuals of SARIMA(2,1,2) model on our data set.
+* In the time series plot (in Fig 14), the plot seems to be detrended.
+* Then we plotted the ACF and PACF plot to check if the seasonality is still present.
+* From the ACF (in Fig 15) and PACF (in Fig 16), we can observe one significant lag at lag 1 in ACF and two significant lags at lag 1 and lag 2 in PACF.
+* So we include SARIMA(2,1,1)x(2,1,2)_12 and SARIMA(0,1,1)x(2,1,2)_12 (if you think PACF is tailing off and so this is only MA(1)) models into the set of possible SARIMA models.
+* Further, we plot the EACF table to check for more possible SARIMA models.
+* We select three  points at the top left corner of table, i.e. ARMA(0,1), ARMA(0,2) and ARMA(1,2).
+* Therefore, we include SARIMA(0,1,1)x(2,1,2)_12, SARIMA(0,1,2)x(2,1,2)_12 and SARIMA(1,1,2)x(2,1,2)_12 models into the set of possible SARIMA models.
+* We added SARIMA(2,1,2)x(2,1,2)_12 model into the set of possible SARIMA models, just to overfit SARIMA(2,1,1)x(2,1,2)_12 and SARIMA(1,1,2)x(2,1,2)_12 models.
+* Finally, the set of possible SARIMA models includes SARIMA(0,1,1)x(2,1,2)_12, SARIMA(0,1,2)x(2,1,2)_12, SARIMA(1,1,2)x(2,1,2)_12, SARIMA(2,1,2)x(2,1,2)_12 and SARIMA(2,1,1)x(2,1,2)_12 models.
+
+```{r}
+# We add the SARMA(2,2) component and see if we get rid of seasonal component.
+p2.product = arima(pri_ts, order=c(0, 0, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p2 = residuals(p2.product)
+par(mfrow = c(1, 1))
+plot(res.p2, xlab='Time', ylab='Residuals', main="Fig 7. TS plot of residuals")
+par(mfrow = c(1, 2))
+acf(res.p2, lag.max = 36, main = "Fig 8. ACF of residuals")
+pacf(res.p2, lag.max = 36, main = "Fig 9. PACF of residuals")
+# No significant lags at the first seasonal lags in either acf and pacf
+# we can conclude that the seasonality is filtered out.
+# The significant correlation in PACF is probably due to the change point in the series.
+
+# Let's apply log transformation first.
+log.pri_ts = log(pri_ts)
+par(mfrow=c(1, 1))
+plot(log.pri_ts, ylab='log primary productions', xlab='Year', main = "Fig 10. TS plot of log monthly primary production")
+# variance stabilized
+
+# Check if we can see trend 
+p3.product = arima(log.pri_ts, order = c(0, 0, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p3 = residuals(p3.product)
+par(mfrow = c(1, 1))
+plot(res.p3,xlab='Time',ylab='Residuals',main="Fig 11. TS plot of the residuals")
+par(mfrow = c(1, 2))
+acf(res.p3, lag.max = 36, main = "Fig 12. ACF of residuals")
+pacf(res.p3, lag.max = 36, main = "Fig 13. PACF of residuals")
+#We found no clear outstanding significant lags at lag 1 in ACF AND PACF
+
+#Maybe indicates non-staionary, try 1 time differencing
+p4.product = arima(log.pri_ts, order = c(0, 1, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p4 = residuals(p4.product)
+par(mfrow = c(1, 1))
+plot(res.p4, xlab = 'Time', ylab = 'Residuals', main = "Fig 14. TS plot of the residuals")
+par(mfrow = c(1, 2))
+acf(res.p4, lag.max = 36, main = "Fig 15. ACF of residuals")
+pacf(res.p4, lag.max = 36, main = "Fig 16. PACF of residuals")
+# From ACF: q=1, From PACF p=2,maximum p=4
+eacf(res.p4)
+#So ARMA(0,1),ARMA(0,2),ARMA(1,2) from eacf
+# The tentative models are specified as 
+# SARIMA(2,1,1)x(2,1,2)_12 by ACF and PACF
+# SARIMA(0,1,1)x(2,1,2)_12 by ACF and PACF if you think PACF is tailing off and so this is only MA(1)
+# SARIMA(0,1,1)x(2,1,2)_12 by EACF
+# SARIMA(0,1,2)x(2,1,2)_12 by EACF
+# SARIMA(1,1,2)x(2,1,2)_12 by EACF
+# SARIMA(2,1,2)x(2,1,2)_12 for overfitting SARIMA(1,1,2)x(2,1,2)_12
+#So we need to try:
+#SARIMA(0,1,1)x(2,1,2)_12,
+#SARIMA(0,1,2)x(2,1,2)_12,SARIMA(1,1,2)x(2,1,2)_12
+#SARIMA(2,1,2)x(2,1,2)_12,SARIMA(2,1,1)x(2,1,2)_12
+```
+
+# Finding the Best Seasonal ARIMA Model
+
+* Next step, we will fit those models above from small to larger and check the residuals plot to see which one performs white noise on residuals.   
+* The Fig 17, below, shows the time series plot of the residuals.   
+* There is constant variance, which means around zero.   
+* There are few residuals of [0.4,-0.4].the PACF and ACF for the SARIMA(0,1,1)x(2,1,2)_12.   
+* There are two significant lags in both PACF and ACF (Fig 18 and Fig 19). We doubt the residual is white noise.
+
+```{r}
+##SARIMA(0,1,1)x(2,1,2)_12
+sp5.product = arima(log(pri_ts),order=c(0,1,1),seasonal=list(order=c(2,1,2), period=12))
+res.sp5 = residuals(sp5.product)
+par(mfrow=c(1,1))
+plot(res.sp5,xlab='Time',ylab='Residuals',main="Fig 17. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp5, lag.max = 36, main = "Fig 18. ACF of residuals")
+pacf(res.sp5, lag.max = 36, main = "Fig 19. PACF of residuals")
+#We found 2 significant lags in both ACF AND PACF for residuals
+```
+
+* Next, we increase the Moving Average term to MA(2), SARIMA(0,1,2)x(2,1,2)_12 model is applied.
+* The residuals plot(Fig 20) looks almost the same as the previous model.
+* The PACF and ACF(Fig 21 and 22) are performing better, there are still two significant lags in PACF but closer to the blue dash line, and only one correlated lags on ACF.
+
+```{r}
+##SARIMA(0,1,2)x(2,1,2)_12
+sp6.product = arima(log(pri_ts),order=c(0,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp6 = residuals(sp6.product)
+par(mfrow=c(1,1))
+plot(res.sp6,xlab='Time',ylab='Residuals',main="Fig 20. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp6, lag.max = 36, main = "Fig 21. ACF of residuals")
+pacf(res.sp6, lag.max = 36, main = "Fig 22. PACF of residuals")
+# Better than the above, but still weak correlations for residuals
+```
+
+* Then, we increase the AR term to AR(1), the model SARIMA(1,1,2)x(2,1,2)_12 is applied.
+* We check the residual plot (Fig 23) which looks slightly squeezing and more constant variance. It performs slightly better.
+* To check the PACF and ACF (Fig 24 and Fig 25), there is one outstanding auto-correlated lags on ACF and one significant auto-correlated lags in PACF, but it is closer to the blue-dashed line, which performs better than the model SARIMA(0,1,2)x(2,1,2)_12.
+
+```{r}
+##SARIMA(1,1,2)x(2,1,2)_12
+sp7.product = arima(log(pri_ts),order=c(1,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp7 = residuals(sp7.product)
+par(mfrow=c(1,1))
+plot(res.sp7,xlab='Time',ylab='Residuals',main="Fig 23. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp7, lag.max = 36, main = "Fig 24. ACF of residuals")
+pacf(res.sp7, lag.max = 36, main = "Fig 25. PACF of residuals")
+# ACF shows WhiteNoise, 1 significant lags in PACF
+```
+
+* Similar process to check the performance of model SARIMA(2,1,1)x(2,1,2)_12.
+* The  residuals plot (Fig 26) looks approximately the same as the previous one.
+* Besides, the ACF (Fig 27) shows no significant lags except at lag 0 and the PACF (Fig 28) shows only 1 weak significant lag, which indicates the model SARIMA(2,1,1)x(2,1,2)_12 outperformed than model SARIMA(1,1,2)x(2,1,2)_12.
+
+```{r}
+##SARIMA(2,1,1)x(2,1,2)_12
+sp8.product = arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(2,1,2), period=12))
+res.sp8 = residuals(sp8.product)
+par(mfrow=c(1,1))
+plot(res.sp8,xlab='Time',ylab='Residuals',main="Fig 26. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp8, lag.max = 36, main = "Fig 27. ACF of residuals")
+pacf(res.sp8, lag.max = 36, main = "Fig 28. PACF of residuals")
+# ACF can be considered as WN, PACF getting better
+```
+
+* The model SARIMA(2,1,2)x(2,1,2)_12 is an overfitting model of SARIMA(2,1,1)x(2,1,2)_12.
+* By visualising the residual plot (Fig 29) and ACF and PACF plots (Fig 30 and Fig 31), the overfitting model has reasonably the same performance.
+* So, because of the principle of parsimony, SARIMA(2,1,1)x(2,1,2)_12 is preferred.
+
+```{r, warning = FALSE}
+##SARIMA(2,1,2)x(2,1,2)_12
+sp9.product = arima(log(pri_ts),order=c(2,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp9 = residuals(sp9.product)
+par(mfrow=c(1,1))
+plot(res.sp9,xlab='Time',ylab='Residuals',main="Fig 29. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp9, lag.max = 36, main = "Fig 30. ACF of residuals")
+pacf(res.sp9, lag.max = 36, main = "Fig 31. PACF of residuals")
+#Same as the sp8, but SARIMA(2,1,1)x(2,1,2)_12 < SARIMA(2,1,2)x(2,1,2)_12, so pick sp8
+```
+
+
+# Residual Analysis of all the Chosen Competitive Models
+
+* Overall, we have three competitive tested models SARIMA(0,1,2)x(2,1,2)_12, SARIMA(1,1,2)x(2,1,2)_12 and SARIMA(2,1,1)x(2,1,2)_12. These 3 models are almost performing white-noise. We also compare the adequacy of the models using an overfitting approach.This approach is based on significance tests. Therefore we should be concerned about normality.
+* By the result of the Shapiro-wilk test for these 3 models, the p-values are less than 0.05 which indicates evidence to reject the normality. Also, we check the standardised residuals which look satisfied. The Ljung-Box test shows evidence to support independence. Since we have a large sample size and plots look good, by Central Limit Theorem (in Math Stat and Prob Theory), the significance test results are valid even if the original data/residuals are non-normal. 
+* Then we check the estimated coefficients in these 3 models, we found the SARIMA(2,1,1)x(2,1,2)_12 is containing the most significant terms than others. However, only AR(1), AR(2), MA(1), SAR(1) and SMA(2) are significant which reject the SAR(2) fitting in the model. Therefore, it is highly likely to decrease the level of SAR term and use the model SARIMA(2,1,1)x(1,1,2)_12.
+
+```{r}
+#Overall, we have three competitive nested models sP6,sP7,sP8(Only these 3 are almost shows white-noise)
+# Comparing the adequacy of the models using overfitting approach.
+# This approach is based on significance test. 
+# Therefore we need normality. 
+
+#SARIMA(0,1,2)x(2,1,2)_12
+residual.analysis(model = sp6.product)#Check normality and residuals
+coeftest(sp6.product)#Check significant terms
+```
+
+```{r}
+#SARIMA(1,1,2)x(2,1,2)_12
+residual.analysis(model = sp7.product) # Check normality and residuals
+coeftest(sp7.product) # Check significant terms
+```
+
+```{r}
+#SARIMA(2,1,1)x(2,1,2)_12
+residual.analysis(model = sp8.product)#Check normality and residuals
+coeftest(sp8.product)#Check significant terms
+#P-value less than 0.05, non-normal,but large sample size, plots look good.
+# But the sample size is large. By Central Limit Theorem (in Math Stat and Prob Theory),
+# significance test results are valid even if the original data/residuals are non-normal. 
+# So we can safely skip this step.
+
+#Then we check below 3 models
+#Since we found that only AR(1),AR(2),MA(1),SAR(1),SMA(2) are significant
+#Therefore, we should use model SARIMA(2,1,1)x(1,1,2)_12
+```
+
+
+# Analysis of Final Competitive Model
+
+* From the above information, we need to verify whether SARIMA(2,1,1)x(1,1,2)_12 is the most competitive model. Firstly, we check the residual plot (Fig 32), it shows the residuals randomly allocated around zero line which indicates zero mean and constant variance. Then we check the ACF and PACF (Fig 33 and Fig 34) where there is a weak significant lag in PACF, but it is near to the dashed line so it could be ignore; in the ACF, there is one significant lag, but it indicates the autocorrelation is smaller than -0.01 which could be ignore. It is reasonably considered this model as White-Noise.
+* Next, we use the Shapiro-Wilk test and it shows the p-value is less than 0.05 which should indicate that there is evidence to reject the normality. However, from the standardised residuals plot shows reasonably constant variance, the histogram of standardized residuals is showing a symmetric bell-shape and most of data are allocating on the line in the normal QQ plots, which indicates normal distribution. Moreover, there is no significant lag in the ACF of Standardised residuals. Also, the Ljung-Box shows independence. We believe that the normality and independence in this model are satisfied, even the result of the Shapiro-Wilk test is less than 5%. Thus, SARIMA(2,1,1)x(1,1,2)_12 is a feasible competitive model.
+* To confirm it, we found that SARIMA(2,1,1)x(1,1,2)_12 has the lowest AIC and BIC scores among the above competitive models. Therefore, we should believe that SARIMA(2,1,1)x(1,1,2)_12 is the best competitive model for prediction.
+
+```{r}
+#Now check residuals for SARIMA(2,1,1)x(1,1,2)_12
+sp10.product = arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(1,1,2), period=12))
+res.sp10 = residuals(sp10.product)
+par(mfrow=c(1,1))
+plot(res.sp10,xlab='Time',ylab='Residuals',main="Fig 32. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp10, lag.max = 36, main = "Fig 33. ACF of residuals")
+pacf(res.sp10, lag.max = 36, main = "Fig 34. PACF of residuals")
+#Reasonably consider as WHITE-NOISE
+
+#For normality
+residual.analysis(model = sp10.product)
+#P-value less than 0.05, non-normal, but large sample size, plots look good
+
+#Coeficient Test
+coeftest(sp10.product)#SARIMA(2,1,1)x(1,1,2)_12
+
+# Also compare based on AIC
+sc.AIC = AIC(sp6.product,sp7.product,sp8.product,sp10.product)
+sort.score(sc.AIC, score = "aic")
+sc.BIC = BIC(sp6.product,sp7.product,sp8.product,sp10.product)
+sort.score(sc.BIC, score = "bic")
+
+#Shows that we should use sp10 with lowest AIC and lowest BIC
+
+# Forecasting based on sp10
+# Original dataset is entered in Arima function. Arima function applies the differencing
+# and power transformation, if there is any, on the original dataset automatically. It #then applies
+# back transformation on the results.
+# Note that order of differencing and the power of power transformation are to be #determined 
+# by the analyst prior to this stage. Once they are determined/fixed, they are used here
+# to apply. Power can be let selected by Arima function as well, if you wish.
+```
+
+
+# Forecasting
+
+* After above sorting, the best competitive model SARIMA(2,1,1)x(1,1,2)_12 with a LOG-Transform on the original monthly time-series data, with method maximum-likelihood is used to forecast 10 years ahead. Since this is a monthly data, each 12 points(months) is equal to 1 year. For 10 years forwards, there are h=120 ahead.
+* The plot(Fig 35) represents that the productivity in Chatham region will approximately remain the same pattern moving forward as previously, but there is a slightly upward trend for the intervals, which indicates the phytoplankton possibly is increasing.
+
+```{r}
+sp10.product_2 = Arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(1,1,2), period=12),method = "ML")
+# remember Arima function: does the back-differencing. Also note that results are in log scale.
+# next 12 points (1 year)
+future = forecast(sp10.product_2, h = 120)
+print(future)
+#Too many, maybe no need to show all
+plot(future,main="Fig 35. Forecast 10 years ahead")
+```
+
+
+# Conclusion
+
+* We analysed the date collected for investigating phytoplankton growth in oceanic waters around the Chatham Rise Region from Jan 1998 to Dec 2017, on a monthly basis.
+* We performed the data modelling and concluded that our data gives best results for model fitting, when we do the first differencing of the Logarithmic transformed data.
+* Further, we have proposed a set of possible ARIMA models, using each and every model specification tool such as ACF, PACF, EACF as SARIMA(0,1,1)x(2,1,2)_12, SARIMA(0,1,2)x(2,1,2)_12, SARIMA(1,1,2)x(2,1,2)_12, SARIMA(2,1,2)x(2,1,2)_12 and SARIMA(2,1,1)x(2,1,2)_12.
+* Going forward, we performed Residual Analysis and conclude that our chosen model SARIMA(2,1,1)x(1,1,2)_12 is the best fit model.
+* Finally, we use time series to do the forecasting to find the change of ecosystems so that the economic, cultural and recreational purposes for the marine services will be affected.
+* For background research, we know that the increasing speed of phytoplankton in oceanic regions is faster than in coastal areas.
+* Furthermore, we use our fitted model to predict the growth in next 10 years. The result is it will have a slight increase in future years. The reason for the rise might be a result of a small potential climate change. 
+
+
+# References
+
+* Statistics New Zealand: Overall, the Chatham Rise region had the highest offshore primary productivity in New Zealand, between 1997 and 2018. (Last updated Oct 17, 2019) https://www.stats.govt.nz/indicators/primary-productivity
+* MATH1318 Time Series Analysis notes prepared by Dr. Haydar Demirhan.
+* Time Series Analysis with application in R by Cryer and Chan.
+
+
+# Appendix
+
+### R Code
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE,message=FALSE)
+
+library(TSA)
+library(fUnitRoots)
+library(lmtest)
+library(s20x)
+library(FitAR)
+library(forecast)
+sort.score <- function(x, score = c("bic", "aic")){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  } else if (score == "bic") {
+    x[with(x, order(BIC)),]
+  } else {
+    warning('score = "x" only accepts valid arguments ("aic","bic")')
+  }
+}
+residual.analysis <- function(model, std = TRUE){
+  library(TSA)
+  library(FitAR)
+  if (std == TRUE){
+    res.model = rstandard(model)
+  }else{
+    res.model = residuals(model)
+  }
+  par(mfrow=c(3,2))
+  plot(res.model,type='o',ylab='Standardised residuals', main="Time series plot of standardised residuals")
+  abline(h=0)
+  hist(res.model,main="Histogram of standardised residuals")
+  qqnorm(res.model,main="QQ plot of standardised residuals")
+  qqline(res.model, col = 2)
+  acf(res.model,main="ACF of standardised residuals")
+  print(shapiro.test(res.model))
+  k=0
+  LBQPlot(res.model, lag.max = length(model$residuals)-1 , StartLag = k + 1, k = 0, SquaredQ = FALSE)
+}
+
+pri=read.csv("primary_productivity_clean.csv")
+pri=pri[seq(1:240),]#Take the first 240, which Jan1998-Dec2017,in Chatham Ocean
+cal_mean=mean(pri$data_value,na.rm=T)
+pri[is.na(pri)]<-cal_mean#Convert the missing value to the mean of data_value
+pri_ts=ts(pri$data_value,start = c(1998,1),end=c(2017,12),frequency = 12)
+plot(pri_ts,main="Fig 1. TS plot of monthly primary-productivity")
+par(mfrow=c(1,2))
+acf(pri_ts,  lag.max = 36, main="Fig 2. ACF of phytoplankton growth")
+pacf(pri_ts,  lag.max = 36,main="Fig 3. PACF of phytoplankton growth")
+p1.product = arima(pri_ts,order=c(0,0,0),seasonal=list(order=c(0,1,0), period=12))
+res.p1 = residuals(p1.product)
+par(mfrow=c(1,1))
+plot(res.p1,xlab='Time',ylab='Residuals',main="Fig 4. TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.p1, lag.max = 36, main = "Fig 5. Sample ACF of the residuals")
+pacf(res.p1, lag.max = 36, main = "Fig 6. Sample PACF of the residuals")
+
+p2.product = arima(pri_ts, order=c(0, 0, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p2 = residuals(p2.product)
+par(mfrow = c(1, 1))
+plot(res.p2, xlab='Time', ylab='Residuals', main="Fig 7. TS plot of residuals")
+par(mfrow = c(1, 2))
+acf(res.p2, lag.max = 36, main = "Fig 8. ACF of the residuals")
+pacf(res.p2, lag.max = 36, main = "Fig 9. PACF of the residuals")
+
+log.pri_ts = log(pri_ts)
+par(mfrow=c(1, 1))
+plot(log.pri_ts, ylab='log primary productions', xlab='Year', main = "Fig 10. TS plot of log monthly primary production")
+
+p3.product = arima(log.pri_ts, order = c(0, 0, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p3 = residuals(p3.product)
+par(mfrow = c(1, 1))
+plot(res.p3,xlab='Time',ylab='Residuals',main="Fig 11. TS plot of the residuals")
+par(mfrow = c(1, 2))
+acf(res.p3, lag.max = 36, main = "Fig 12. Sample ACF of the residuals")
+pacf(res.p3, lag.max = 36, main = "Fig 13. Sample PACF of the residuals")
+
+p4.product = arima(log.pri_ts, order = c(0, 1, 0), seasonal = list(order = c(2, 1, 2), period = 12))
+res.p4 = residuals(p4.product)
+par(mfrow = c(1, 1))
+plot(res.p4, xlab = 'Time', ylab = 'Residuals', main = "Fig 14. TS plot of the residuals")
+par(mfrow = c(1, 2))
+acf(res.p4, lag.max = 36, main = "Fig 15. Sample ACF of the residuals")
+pacf(res.p4, lag.max = 36, main = "Fig 16. Sample PACF of the residuals")
+eacf(res.p4)
+
+sp5.product = arima(log(pri_ts),order=c(0,1,1),seasonal=list(order=c(2,1,2), period=12))
+res.sp5 = residuals(sp5.product)
+par(mfrow=c(1,1))
+plot(res.sp5,xlab='Time',ylab='Residuals',main="Figure.5 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp5, lag.max = 36, main = "Figure.5 Sample ACF of the residuals")
+pacf(res.sp5, lag.max = 36, main = "Figure.5 Sample PACF of the residuals")
+
+sp6.product = arima(log(pri_ts),order=c(0,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp6 = residuals(sp6.product)
+par(mfrow=c(1,1))
+plot(res.sp6,xlab='Time',ylab='Residuals',main="Figure.6 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp6, lag.max = 36, main = "Figure.6 Sample ACF of the residuals")
+pacf(res.sp6, lag.max = 36, main = "Figure.6 Sample PACF of the residuals")
+
+sp7.product = arima(log(pri_ts),order=c(1,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp7 = residuals(sp7.product)
+par(mfrow=c(1,1))
+plot(res.sp7,xlab='Time',ylab='Residuals',main="Figure.7 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp7, lag.max = 36, main = "Figure.7 Sample ACF of the residuals")
+pacf(res.sp7, lag.max = 36, main = "Figure.7 Sample PACF of the residuals")
+
+sp8.product = arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(2,1,2), period=12))
+res.sp8 = residuals(sp8.product)
+par(mfrow=c(1,1))
+plot(res.sp8,xlab='Time',ylab='Residuals',main="Figure.8 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp8, lag.max = 36, main = "Figure.8 Sample ACF of the residuals")
+pacf(res.sp8, lag.max = 36, main = "Figure.8 Sample PACF of the residuals")
+
+sp9.product = arima(log(pri_ts),order=c(2,1,2),seasonal=list(order=c(2,1,2), period=12))
+res.sp9 = residuals(sp9.product)
+par(mfrow=c(1,1))
+plot(res.sp9,xlab='Time',ylab='Residuals',main="Figure.9 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp9, lag.max = 36, main = "Figure.9 Sample ACF of the residuals")
+pacf(res.sp9, lag.max = 36, main = "Figure.9 Sample PACF of the residuals")
+
+residual.analysis(model = sp6.product)#Check normality and residuals
+coeftest(sp6.product)#Check significant terms
+
+residual.analysis(model = sp7.product) # Check normality and residuals
+coeftest(sp7.product) # Check significant terms
+
+residual.analysis(model = sp8.product)#Check normality and residuals
+coeftest(sp8.product)#Check significant terms
+
+sp10.product = arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(1,1,2), period=12))
+res.sp10 = residuals(sp10.product)
+par(mfrow=c(1,1))
+plot(res.sp10,xlab='Time',ylab='Residuals',main="Figure.10 TS plot of the residuals")
+par(mfrow=c(1,2))
+acf(res.sp10, lag.max = 36, main = "Figure.10 Sample ACF of the residuals")
+pacf(res.sp10, lag.max = 36, main = "Figure.10 Sample PACF of the residuals")
+
+residual.analysis(model = sp10.product)
+
+coeftest(sp10.product)#SARIMA(2,1,1)x(1,1,2)_12
+
+sc.AIC = AIC(sp6.product,sp7.product,sp8.product,sp10.product)
+sort.score(sc.AIC, score = "aic")
+sc.BIC = BIC(sp6.product,sp7.product,sp8.product,sp10.product)
+sort.score(sc.BIC, score = "bic")
+
+sp10.product_2 = Arima(log(pri_ts),order=c(2,1,1),seasonal=list(order=c(1,1,2), period=12),method = "ML")
+future = forecast(sp10.product_2, h = 120)
+print(future)
+plot(future,main="Figure.10 Forecast 10 years ahead")
